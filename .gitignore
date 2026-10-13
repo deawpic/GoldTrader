@@ -30,6 +30,7 @@ ENV/
 .tmp/
 *.tmp
 *.log
+stack.json
 stack.json.tmp
 cache/*.db
 cache/*.db-wal
