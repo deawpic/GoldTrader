@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# Temporary and Cache
+.tmp/
+*.tmp
+stack.json.tmp
+cache/*.db
+cache/*.db-wal
+cache/*.db-shm
+
+# MetaTrader Compiled Binaries (keep source .mq4, .mq5, .mqh)
+*.ex4
+*.ex5
+
+# OS generated
+.DS_Store
+Thumbs.db

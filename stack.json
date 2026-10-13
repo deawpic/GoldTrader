@@ -1,0 +1,37 @@
+{
+  "session_id": "gold-d531d0a9",
+  "current_state": "STRATEGY_SPEC",
+  "strict_level": "strict",
+  "stack_depth": 1,
+  "stack": [
+    {
+      "task_id": "GOLD-DEMO-001",
+      "parent_id": null,
+      "title": "Implement XAUUSD Trend Scalper",
+      "description": "",
+      "assigned_agent": "strategy_pm",
+      "status": "PENDING",
+      "artifacts": [],
+      "allowed_files": [
+        "docs/strategies/xauusd-microstructure-spec.md"
+      ],
+      "max_lines_changed": 300,
+      "budget": {
+        "max_tokens": 20000,
+        "used_tokens": 0,
+        "max_retries": 2,
+        "current_retries": 1,
+        "max_cost_usd": 0.5,
+        "current_cost_usd": 0.0
+      },
+      "verification_receipt": null,
+      "metadata": {},
+      "created_at": 1791908114.369918,
+      "updated_at": 1791908114.3699183
+    }
+  ],
+  "history": [],
+  "metadata": {},
+  "created_at": 1791908114.3697455,
+  "updated_at": 1791908114.3720343
+}
