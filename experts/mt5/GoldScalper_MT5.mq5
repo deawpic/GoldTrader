@@ -10,7 +10,7 @@
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
 #include <Trade\SymbolInfo.mqh>
-#include <..\include\mt5\TradeHelper_MT5.mqh>
+#include "..\..\include\mt5\TradeHelper_MT5.mqh"
 
 //--- Input Parameters
 input group "=== Strategy Parameters ==="
@@ -29,6 +29,14 @@ input int      InpMaxSpreadPoints   = 40;        // Max Spread Allowed (Points)
 input ulong    InpMagicNumber       = 108855;    // EA Magic Number
 input string   InpTradeComment      = "GoldScalp_MT5";
 
+input group "=== Trailing & Breakeven ==="
+input bool     InpUseBreakeven      = true;      // Use Breakeven Protection
+input double   InpBreakevenTrigger  = 100.0;     // Profit Points to Trigger Breakeven
+input double   InpBreakevenLock     = 10.0;      // Profit Points to Lock
+input bool     InpUseATRTrailing    = true;      // Use ATR Trailing Stop
+input int      InpATRPeriod         = 14;        // ATR Period for Trailing Stop
+input double   InpATRMultiplier     = 1.5;       // ATR Multiplier
+
 //--- Global Objects
 CTrade         trade;
 CPositionInfo  posInfo;
@@ -38,6 +46,7 @@ CSymbolInfo    symInfo;
 int            handleFastEMA        = INVALID_HANDLE;
 int            handleSlowEMA        = INVALID_HANDLE;
 int            handleRSI            = INVALID_HANDLE;
+int            handleATR            = INVALID_HANDLE;
 
 datetime       g_lastBarTime        = 0;
 
@@ -61,8 +70,9 @@ int OnInit()
    handleFastEMA = iMA(_Symbol, _Period, InpFastEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
    handleSlowEMA = iMA(_Symbol, _Period, InpSlowEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
    handleRSI     = iRSI(_Symbol, _Period, InpRSIPeriod, PRICE_CLOSE);
+   handleATR     = iATR(_Symbol, _Period, InpATRPeriod);
 
-   if(handleFastEMA == INVALID_HANDLE || handleSlowEMA == INVALID_HANDLE || handleRSI == INVALID_HANDLE)
+   if(handleFastEMA == INVALID_HANDLE || handleSlowEMA == INVALID_HANDLE || handleRSI == INVALID_HANDLE || handleATR == INVALID_HANDLE)
    {
       Print("Error creating indicator handles in OnInit()");
       return(INIT_FAILED);
@@ -81,6 +91,7 @@ void OnDeinit(const int reason)
    if(handleFastEMA != INVALID_HANDLE) IndicatorRelease(handleFastEMA);
    if(handleSlowEMA != INVALID_HANDLE) IndicatorRelease(handleSlowEMA);
    if(handleRSI != INVALID_HANDLE)     IndicatorRelease(handleRSI);
+   if(handleATR != INVALID_HANDLE)     IndicatorRelease(handleATR);
    Comment("");
 }
 
@@ -109,7 +120,7 @@ int CountOpenPositions(ENUM_POSITION_TYPE posType)
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MqlInfoInteger(MQL_TRADE_ALLOWED)) return;
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED)) return;
 
    // 1. Dynamic Spread Check
    if(!CTradeHelper::IsSpreadAcceptable(symInfo, InpMaxSpreadPoints))
@@ -118,7 +129,17 @@ void OnTick()
       return;
    }
 
-   // 2. Bar Filter (Only trade once per new bar)
+   // 2. Active Trade Maintenance (Breakeven & Trailing Stops)
+   if(InpUseBreakeven)
+   {
+      CTradeHelper::ApplyBreakeven(trade, posInfo, symInfo, InpMagicNumber, InpBreakevenTrigger, InpBreakevenLock);
+   }
+   if(InpUseATRTrailing)
+   {
+      CTradeHelper::ApplyATRTrailingStop(trade, posInfo, symInfo, InpMagicNumber, handleATR, InpATRMultiplier);
+   }
+
+   // 3. Bar Filter (Only trade once per new bar)
    datetime currentBarTime[];
    ArraySetAsSeries(currentBarTime, true);
    if(CopyTime(_Symbol, _Period, 0, 1, currentBarTime) <= 0) return;

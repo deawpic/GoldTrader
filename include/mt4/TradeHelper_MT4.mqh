@@ -60,3 +60,149 @@ bool IsSpreadAcceptable(string symbol, int maxSpreadPoints)
    double currentSpread = MarketInfo(symbol, MODE_SPREAD);
    return(currentSpread <= maxSpreadPoints);
 }
+
+//+------------------------------------------------------------------+
+//| Apply Breakeven Protection (Locks profit to breakeven + lockPts) |
+//+------------------------------------------------------------------+
+void ApplyBreakeven(string symbol, int magic, double triggerPoints, double lockPoints)
+{
+   double point = MarketInfo(symbol, MODE_POINT);
+   
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderSymbol() == symbol && OrderMagicNumber() == magic)
+         {
+            if(OrderType() == OP_BUY)
+            {
+               double currentProfitPoints = (Bid - OrderOpenPrice()) / point;
+               double targetSL = OrderOpenPrice() + (lockPoints * point);
+               
+               if(currentProfitPoints >= triggerPoints && (OrderStopLoss() < targetSL || OrderStopLoss() == 0))
+               {
+                  if(OrderModify(OrderTicket(), OrderOpenPrice(), targetSL, OrderTakeProfit(), 0, clrBlue))
+                  {
+                     PrintFormat("MT4 Buy #%d moved to Breakeven (+%.1f pts)", OrderTicket(), lockPoints);
+                  }
+               }
+            }
+            else if(OrderType() == OP_SELL)
+            {
+               double currentProfitPoints = (OrderOpenPrice() - Ask) / point;
+               double targetSL = OrderOpenPrice() - (lockPoints * point);
+               
+               if(currentProfitPoints >= triggerPoints && (OrderStopLoss() > targetSL || OrderStopLoss() == 0))
+               {
+                  if(OrderModify(OrderTicket(), OrderOpenPrice(), targetSL, OrderTakeProfit(), 0, clrBlue))
+                  {
+                     PrintFormat("MT4 Sell #%d moved to Breakeven (+%.1f pts)", OrderTicket(), lockPoints);
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Apply Dynamic Trailing Stop                                      |
+//+------------------------------------------------------------------+
+void ApplyTrailingStop(string symbol, int magic, double trailPoints, double minProfitPoints)
+{
+   if(trailPoints <= 0) return;
+   double point = MarketInfo(symbol, MODE_POINT);
+   double stopLevel = MarketInfo(symbol, MODE_STOPLEVEL);
+   if(trailPoints < stopLevel) trailPoints = stopLevel;
+   
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderSymbol() == symbol && OrderMagicNumber() == magic)
+         {
+            if(OrderType() == OP_BUY)
+            {
+               double profitPoints = (Bid - OrderOpenPrice()) / point;
+               if(profitPoints >= minProfitPoints)
+               {
+                  double targetSL = Bid - (trailPoints * point);
+                  if(targetSL > OrderStopLoss() + (5.0 * point))
+                  {
+                     if(OrderModify(OrderTicket(), OrderOpenPrice(), targetSL, OrderTakeProfit(), 0, clrAqua))
+                     {
+                        // Trailing stop modified successfully
+                     }
+                  }
+               }
+            }
+            else if(OrderType() == OP_SELL)
+            {
+               double profitPoints = (OrderOpenPrice() - Ask) / point;
+               if(profitPoints >= minProfitPoints)
+               {
+                  double targetSL = Ask + (trailPoints * point);
+                  if(OrderStopLoss() == 0 || targetSL < OrderStopLoss() - (5.0 * point))
+                  {
+                     if(OrderModify(OrderTicket(), OrderOpenPrice(), targetSL, OrderTakeProfit(), 0, clrAqua))
+                     {
+                        // Trailing stop modified successfully
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Apply ATR-Based Volatility Trailing Stop                         |
+//+------------------------------------------------------------------+
+void ApplyATRTrailingStop(string symbol, int timeframe, int magic, int atrPeriod, double atrMultiplier)
+{
+   double atr = iATR(symbol, timeframe, atrPeriod, 1);
+   if(atr <= 0) return;
+   
+   double trailDistance = atr * atrMultiplier;
+   double point = MarketInfo(symbol, MODE_POINT);
+   double trailPoints = trailDistance / point;
+   double stopLevel = MarketInfo(symbol, MODE_STOPLEVEL);
+   if(trailPoints < stopLevel) trailPoints = stopLevel;
+   
+   ApplyTrailingStop(symbol, magic, trailPoints, trailPoints * 0.5);
+}
+
+//+------------------------------------------------------------------+
+//| Close Partial Volume (e.g. 50% lot size at first target)         |
+//+------------------------------------------------------------------+
+bool ClosePartial(string symbol, int magic, double closePercent)
+{
+   if(closePercent <= 0 || closePercent >= 100) return false;
+   double step   = MarketInfo(symbol, MODE_LOTSTEP);
+   double minLot = MarketInfo(symbol, MODE_MINLOT);
+   
+   bool closedAny = false;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderSymbol() == symbol && OrderMagicNumber() == magic)
+         {
+            double closeLots = OrderLots() * (closePercent / 100.0);
+            closeLots = MathFloor(closeLots / step) * step;
+            
+            if(closeLots >= minLot && closeLots < OrderLots())
+            {
+               double closePrice = (OrderType() == OP_BUY) ? Bid : Ask;
+               if(OrderClose(OrderTicket(), closeLots, closePrice, 20, clrGold))
+               {
+                  PrintFormat("MT4 Order #%d partially closed (%.2f lots of %.2f)", OrderTicket(), closeLots, OrderLots());
+                  closedAny = true;
+               }
+            }
+         }
+      }
+   }
+   return closedAny;
+}

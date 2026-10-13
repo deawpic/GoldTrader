@@ -159,13 +159,16 @@ class DeterministicVerifier:
 
         return True, ""
 
-    def verify_artifacts(self, artifact_paths: List[str]) -> VerificationResult:
+
+    def verify_artifacts(self, artifact_paths: List[str], run_compiler: bool = False) -> VerificationResult:
         """
-        Mandatory Verification before Pop:
-        Verifies physical existence and syntax/semantics of all declared artifacts.
+        Validates all generated artifacts:
+        1. Confirms physical existence on disk (anti-hallucination guard).
+        2. Checks syntax: Python (py_compile), JSON (json.loads), Markdown rules.
+        3. Runs MQL4/MQL5 deep linter for .mq4, .mq5, .mqh files.
+        4. Optionally runs headless MetaEditor compiler if requested.
         """
         result = VerificationResult(passed=True)
-
         if not artifact_paths:
             result.warnings.append("No artifacts declared for verification.")
             return result
@@ -221,10 +224,23 @@ class DeterministicVerifier:
                 for w in mql_warns:
                     result.warnings.append(f"MQL warning in {path.name}: {w}")
 
+                # Optional headless MetaEditor real compiler pass for EAs
+                if run_compiler and ext in {".mq4", ".mq5"}:
+                    c_valid, c_errs, c_warns, out_bin = self.compile_with_metaeditor(path)
+                    if not c_valid:
+                        result.passed = False
+                        for ce in c_errs:
+                            result.errors.append(f"MetaEditor compile error in {path.name}: {ce}")
+                    for cw in c_warns:
+                        result.warnings.append(f"MetaEditor compile warning in {path.name}: {cw}")
+                    if out_bin:
+                        result.verified_files.append(str(out_bin))
+
         if result.passed and result.verified_files:
+            gate_name = "METAEDITOR_AND_STATIC_CHECK" if run_compiler else "MQL_AND_STATIC_CHECK"
             result.receipt = VerificationReceipt(
                 timestamp=time.time(),
-                gate_type="MQL_AND_STATIC_CHECK",
+                gate_type=gate_name,
                 verified_files=result.verified_files,
                 exit_code=0,
                 status="PASSED",
@@ -424,3 +440,170 @@ class DeterministicVerifier:
         except Exception:
             pass
         return warnings
+
+    def find_metaeditor(self, platform: Optional[str] = None) -> Optional[Path]:
+        """
+        Locates MetaEditor binary for MT4 or MT5.
+        Checks environment variables, default installation directories in Program Files,
+        and standard locations.
+        """
+        target = (platform or "").lower().strip()
+        candidates: List[Path] = []
+
+        if target in {"mt4", ""}:
+            env_mt4 = os.environ.get("MT4_METAEDITOR_PATH")
+            if env_mt4:
+                candidates.append(Path(env_mt4))
+            candidates.extend([
+                Path(r"C:\Program Files (x86)\MetaTrader 4\metaeditor.exe"),
+                Path(r"C:\Program Files\MetaTrader 4\metaeditor.exe"),
+            ])
+            for pf in [os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), os.environ.get("ProgramFiles", r"C:\Program Files")]:
+                pf_path = Path(pf)
+                if pf_path.exists():
+                    try:
+                        for mt_dir in pf_path.glob("MetaTrader*"):
+                            if "5" not in mt_dir.name:
+                                candidate = mt_dir / "metaeditor.exe"
+                                if candidate not in candidates:
+                                    candidates.append(candidate)
+                    except Exception:
+                        pass
+
+        if target in {"mt5", ""}:
+            env_mt5 = os.environ.get("MT5_METAEDITOR_PATH")
+            if env_mt5:
+                candidates.append(Path(env_mt5))
+            candidates.extend([
+                Path(r"C:\Program Files\MetaTrader 5\MetaEditor64.exe"),
+                Path(r"C:\Program Files\MetaTrader 5\metaeditor.exe"),
+                Path(r"C:\Program Files (x86)\MetaTrader 5\MetaEditor64.exe"),
+                Path(r"C:\Program Files (x86)\MetaTrader 5\metaeditor.exe"),
+            ])
+            for pf in [os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")]:
+                pf_path = Path(pf)
+                if pf_path.exists():
+                    try:
+                        for mt_dir in pf_path.glob("MetaTrader 5*"):
+                            for exe_name in ["MetaEditor64.exe", "metaeditor.exe"]:
+                                candidate = mt_dir / exe_name
+                                if candidate not in candidates:
+                                    candidates.append(candidate)
+                    except Exception:
+                        pass
+
+        for cand in candidates:
+            if cand.exists() and cand.is_file():
+                return cand.resolve()
+
+        return None
+
+    def compile_with_metaeditor(
+        self,
+        file_path: Path,
+        metaeditor_path: Optional[Path] = None,
+        timeout: int = 30,
+    ) -> Tuple[bool, List[str], List[str], Optional[Path]]:
+        """
+        Compiles an MQL4 or MQL5 file headlessly via MetaEditor.
+        Returns: (success: bool, errors: List[str], warnings: List[str], binary_path: Optional[Path])
+        """
+        p = Path(file_path).resolve()
+        if not p.exists() or not p.is_file():
+            return False, [f"Source file not found: {p}"], [], None
+
+        ext = p.suffix.lower()
+        if ext == ".mq4":
+            platform = "mt4"
+            expected_bin = p.with_suffix(".ex4")
+        elif ext == ".mq5":
+            platform = "mt5"
+            expected_bin = p.with_suffix(".ex5")
+        else:
+            return False, [f"Unsupported file extension '{ext}' for MetaEditor compilation (expected .mq4 or .mq5)"], [], None
+
+        compiler = metaeditor_path or self.find_metaeditor(platform)
+        if not compiler or not compiler.exists():
+            return False, [
+                f"MetaEditor binary for {platform.upper()} not found. "
+                f"Install MetaTrader or configure {platform.upper()}_METAEDITOR_PATH environment variable."
+            ], [], None
+
+        tmp_dir = self.workspace_root / ".tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        log_file = tmp_dir / f"compile_{p.stem}_{int(time.time() * 1000)}.log"
+
+        if log_file.exists():
+            try:
+                log_file.unlink()
+            except Exception:
+                pass
+
+        cmd = [
+            str(compiler),
+            f"/compile:{p}",
+            f"/log:{log_file}",
+        ]
+
+        log_content = ""
+        try:
+            subprocess.run(cmd, cwd=self.workspace_root, timeout=timeout, capture_output=True, check=False)
+
+            start_wait = time.time()
+            while time.time() - start_wait < 5.0:
+                if log_file.exists() and log_file.stat().st_size > 0:
+                    time.sleep(0.1)
+                    break
+                time.sleep(0.1)
+
+            if not log_file.exists():
+                return False, [f"MetaEditor executed but no log file generated at {log_file}."], [], None
+
+            for enc in ["utf-16", "utf-8", "cp874", "latin-1"]:
+                try:
+                    log_content = log_file.read_text(encoding=enc)
+                    break
+                except Exception:
+                    continue
+
+        except Exception as e:
+            return False, [f"MetaEditor execution error: {e}"], [], None
+        finally:
+            if log_file.exists():
+                try:
+                    log_file.unlink()
+                except Exception:
+                    pass
+
+        errors: List[str] = []
+        warnings: List[str] = []
+        has_result_line = False
+        result_errors = -1
+        result_warnings = -1
+
+        for line in log_content.splitlines():
+            line_str = line.strip()
+            if not line_str:
+                continue
+
+            if " : error " in line_str or line_str.startswith("Error:"):
+                errors.append(line_str)
+            elif " : warning " in line_str or line_str.startswith("Warning:"):
+                warnings.append(line_str)
+
+            res_match = re.search(r"Result:\s*(\d+)\s*errors?,\s*(\d+)\s*warnings?", line_str, re.IGNORECASE)
+            if res_match:
+                has_result_line = True
+                result_errors = int(res_match.group(1))
+                result_warnings = int(res_match.group(2))
+
+        if has_result_line:
+            is_success = (result_errors == 0)
+            if result_errors > 0 and not errors:
+                errors.append(f"MetaEditor reported {result_errors} error(s)")
+        else:
+            is_success = len(errors) == 0 and expected_bin.exists()
+
+        out_bin = expected_bin if (expected_bin.exists() and is_success) else None
+        return is_success, errors, warnings, out_bin
+

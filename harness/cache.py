@@ -204,3 +204,6 @@ class DualLayerCache:
             "hit_ratio": round(hit_ratio, 4),
             "l1_items": len(self._l1),
         }
+
+
+TierZeroCache = DualLayerCache

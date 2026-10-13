@@ -24,8 +24,31 @@ TEST_OPT_IN_TRIGGERS: List[str] = [
 ]
 
 
+from pathlib import Path
+
+
 class TestPolicyGuardian:
     """Enforces Zero-Test by Default and token-optimized testing guardrails."""
+
+    def __init__(self, workspace_root: str = "."):
+        self.workspace_root = Path(workspace_root).resolve()
+
+    def scan_for_unauthorized_tests(self) -> Tuple[bool, List[str]]:
+        """
+        Scans workspace to verify no unauthorized unit test files
+        (test_*.py, *_test.py, tests/) were created.
+        """
+        unauthorized: List[str] = []
+        for p in self.workspace_root.rglob("*.py"):
+            rel_str = str(p.relative_to(self.workspace_root)).replace("\\", "/")
+            if "node_modules" in rel_str or ".venv" in rel_str or ".git" in rel_str or ".tmp" in rel_str:
+                continue
+            # Harness engine components are implementation code, not test suites
+            if rel_str.startswith("harness/"):
+                continue
+            if p.name.startswith("test_") or p.name.endswith("_test.py") or "/tests/" in f"/{rel_str}":
+                unauthorized.append(rel_str)
+        return len(unauthorized) > 0, unauthorized
 
     @staticmethod
     def is_testing_mode_activated(prompt: str) -> bool:
@@ -35,6 +58,8 @@ class TestPolicyGuardian:
             if trigger in prompt_lower:
                 return True
         return False
+
+    is_testing_mode_requested = is_testing_mode_activated
 
     @staticmethod
     def get_log_suppression_cmd(platform: str, target_path: str) -> List[str]:

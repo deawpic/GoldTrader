@@ -25,8 +25,58 @@ class RedFlagAlert:
     immediate_action: str
 
 
+@dataclass
+class AccountSnapshot:
+    equity: float
+    balance: float
+    margin_level: float
+    daily_starting_equity: float
+    current_spread_points: float
+    margin: float = 0.0
+    open_positions: int = 0
+
+
 class EmergencyInterceptor:
     """Interceps severe risk conditions immediately without awaiting long analysis loops."""
+
+    @classmethod
+    def check_trading_health(cls, snapshot: AccountSnapshot) -> Tuple[bool, List[RedFlagAlert]]:
+        """
+        Unified gate checking account snapshot against margin, drawdown, and spread thresholds.
+        Returns: (is_healthy: bool, alerts: List[RedFlagAlert])
+        """
+        daily_loss_pct = 0.0
+        if snapshot.daily_starting_equity > 0:
+            daily_loss_pct = max(0.0, (snapshot.daily_starting_equity - snapshot.equity) / snapshot.daily_starting_equity * 100.0)
+
+        calc_margin = snapshot.margin
+        if calc_margin <= 0 and snapshot.margin_level > 0:
+            calc_margin = snapshot.equity / (snapshot.margin_level / 100.0)
+
+        alerts = cls.inspect_risk_metrics(
+            equity=snapshot.equity,
+            balance=snapshot.balance,
+            margin=calc_margin,
+            spread_points=snapshot.current_spread_points,
+            daily_loss_pct=daily_loss_pct,
+            open_positions=snapshot.open_positions,
+        )
+
+        # XAUUSD Microstructure Spread check (> 40.0 points)
+        if snapshot.current_spread_points > 40.0:
+            has_spread_alert = any(a.alert_type == "SPREAD_SPIKE_FLASH_CRASH" for a in alerts)
+            if not has_spread_alert:
+                alerts.append(
+                    RedFlagAlert(
+                        alert_type="SPREAD_SPIKE_FLASH_CRASH",
+                        severity="HIGH",
+                        message=f"XAUUSD spread ({snapshot.current_spread_points:.1f} pts) exceeds maximum scalping threshold (40.0 pts).",
+                        immediate_action="Reject new order entries until spread narrows.",
+                    )
+                )
+
+        has_critical = any(a.severity in {"CRITICAL", "HIGH"} for a in alerts)
+        return not has_critical, alerts
 
     @staticmethod
     def inspect_risk_metrics(
@@ -128,3 +178,6 @@ class EmergencyInterceptor:
                 )
 
         return alerts
+
+
+RedFlagInterceptor = EmergencyInterceptor

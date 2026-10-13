@@ -143,8 +143,11 @@ def export_markdown_document(
 
     target_file = base_dir / filename
 
-    content_parts = [f"# {title}\n"]
-    content_parts.append(markdown_content.strip())
+    content_parts = []
+    stripped_content = markdown_content.strip()
+    if not stripped_content.startswith("# "):
+        content_parts.append(f"# {title}\n")
+    content_parts.append(stripped_content)
 
     if include_pdf_guidance:
         content_parts.append("\n---\n")

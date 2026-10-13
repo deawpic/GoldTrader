@@ -1,0 +1,109 @@
+[
+  {
+    "id": "TC-01",
+    "name": "MQL4 Backwards Loop Order Iteration",
+    "category": "MQL4_STANDARDS",
+    "weight": 10,
+    "description": "Ensures that all order scanning loops in MQL4 iterate backwards from OrdersTotal()-1 down to 0 to prevent order skipping.",
+    "target_files": [
+      "experts/mt4/GoldScalper_MT4.mq4",
+      "include/mt4/TradeHelper_MT4.mqh"
+    ]
+  },
+  {
+    "id": "TC-02",
+    "name": "MQL4 Order Identification & Slippage Guard",
+    "category": "MQL4_STANDARDS",
+    "weight": 10,
+    "description": "Verifies that all MQL4 trade operations tag orders with MagicNumber and enforce slippage limits.",
+    "target_files": [
+      "experts/mt4/GoldScalper_MT4.mq4"
+    ]
+  },
+  {
+    "id": "TC-03",
+    "name": "MQL5 Modern OOP Trading Engine",
+    "category": "MQL5_STANDARDS",
+    "weight": 10,
+    "description": "Verifies MT5 implementation uses CTrade, CPositionInfo, and CSymbolInfo without deprecated MT4 APIs.",
+    "target_files": [
+      "experts/mt5/GoldScalper_MT5.mq5",
+      "include/mt5/TradeHelper_MT5.mqh"
+    ]
+  },
+  {
+    "id": "TC-04",
+    "name": "Dynamic ATR Trailing Stop with Broker StopLevel Check",
+    "category": "RISK_MANAGEMENT",
+    "weight": 10,
+    "description": "Verifies dynamic ATR-based trailing stop logic respects minimum StopLevel distance and only tightens stops.",
+    "target_files": [
+      "include/mt4/TradeHelper_MT4.mqh",
+      "include/mt5/TradeHelper_MT5.mqh"
+    ]
+  },
+  {
+    "id": "TC-05",
+    "name": "Breakeven Threshold Activation",
+    "category": "RISK_MANAGEMENT",
+    "weight": 10,
+    "description": "Verifies breakeven logic moves Stop Loss to entry price plus lock profit points once profit threshold is reached.",
+    "target_files": [
+      "include/mt4/TradeHelper_MT4.mqh",
+      "include/mt5/TradeHelper_MT5.mqh"
+    ]
+  },
+  {
+    "id": "TC-06",
+    "name": "Emergency Margin Call & Drawdown Circuit Breakers",
+    "category": "RISK_MANAGEMENT",
+    "weight": 10,
+    "description": "Verifies Red Flag Interceptor halts operations on Margin Level < 150% or Daily Drawdown >= 5%.",
+    "target_files": [
+      "harness/interceptor.py"
+    ]
+  },
+  {
+    "id": "TC-07",
+    "name": "Microstructure Spread Spike Interceptor",
+    "category": "MACRO_MICROSTRUCTURE",
+    "weight": 10,
+    "description": "Verifies real-time spread monitoring aborts entries during spread widening (> 40 points on XAUUSD).",
+    "target_files": [
+      "experts/mt4/GoldScalper_MT4.mq4",
+      "experts/mt5/GoldScalper_MT5.mq5",
+      "harness/interceptor.py"
+    ]
+  },
+  {
+    "id": "TC-08",
+    "name": "High-Impact Macroeconomic News Blackout",
+    "category": "MACRO_MICROSTRUCTURE",
+    "weight": 10,
+    "description": "Verifies news filter correctly pauses trading during high-impact US releases (NFP, CPI, FOMC) within +-30m.",
+    "target_files": [
+      "harness/news_filter.py"
+    ]
+  },
+  {
+    "id": "TC-09",
+    "name": "Strict Zero-Test FinOps Token Invariant",
+    "category": "TOKEN_FINOPS",
+    "weight": 10,
+    "description": "Verifies Zero-Test Policy by default is strictly enforced with zero unauthorized test files or unprompted test runner executions.",
+    "target_files": [
+      "harness/test_guardian.py"
+    ]
+  },
+  {
+    "id": "TC-10",
+    "name": "Headless MetaEditor Compiler 0-Error 0-Warning Verification",
+    "category": "HEADLESS_COMPILER",
+    "weight": 10,
+    "description": "Verifies both MT4 (.mq4) and MT5 (.mq5) Expert Advisors compile headlessly via MetaEditor with 0 errors and 0 warnings.",
+    "target_files": [
+      "experts/mt4/GoldScalper_MT4.mq4",
+      "experts/mt5/GoldScalper_MT5.mq5"
+    ]
+  }
+]

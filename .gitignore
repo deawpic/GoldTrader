@@ -29,6 +29,7 @@ ENV/
 # Temporary and Cache
 .tmp/
 *.tmp
+*.log
 stack.json.tmp
 cache/*.db
 cache/*.db-wal

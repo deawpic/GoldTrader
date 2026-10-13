@@ -7,7 +7,8 @@
 #property version   "1.00"
 #property strict
 
-#include <..\include\mt4\TradeHelper_MT4.mqh>
+#include <stdlib.mqh>
+#include "..\..\include\mt4\TradeHelper_MT4.mqh"
 
 //--- Input Parameters
 input group "=== Strategy Parameters ==="
@@ -25,6 +26,14 @@ input int      InpSlippage          = 25;        // Max Slippage (Points)
 input int      InpMaxSpreadPoints   = 40;        // Max Spread Allowed (Points)
 input int      InpMagicNumber       = 108844;    // EA Magic Number
 input string   InpTradeComment      = "GoldScalp_MT4";
+
+input group "=== Trailing & Breakeven ==="
+input bool     InpUseBreakeven      = true;      // Use Breakeven Protection
+input double   InpBreakevenTrigger  = 100.0;     // Profit Points to Trigger Breakeven
+input double   InpBreakevenLock     = 10.0;      // Profit Points to Lock
+input bool     InpUseATRTrailing    = true;      // Use ATR Trailing Stop
+input int      InpATRPeriod         = 14;        // ATR Period for Trailing Stop
+input double   InpATRMultiplier     = 1.5;       // ATR Multiplier
 
 //--- Global Variables
 datetime g_lastBarTime = 0;
@@ -130,10 +139,20 @@ void OnTick()
       return;
    }
    
-   // 2. Bar Filter (Prevent multiple orders on same bar)
+   // 2. Active Trade Maintenance (Breakeven & Trailing Stops)
+   if(InpUseBreakeven)
+   {
+      ApplyBreakeven(Symbol(), InpMagicNumber, InpBreakevenTrigger, InpBreakevenLock);
+   }
+   if(InpUseATRTrailing)
+   {
+      ApplyATRTrailingStop(Symbol(), Period(), InpMagicNumber, InpATRPeriod, InpATRMultiplier);
+   }
+   
+   // 3. Bar Filter (Prevent multiple orders on same bar)
    if(Time[0] == g_lastBarTime) return;
    
-   // 3. Indicator Calculation on closed bar 1 (No repainting)
+   // 4. Indicator Calculation on closed bar 1 (No repainting)
    double fastEMA_1 = iMA(Symbol(), Period(), InpFastEMAPeriod, 0, MODE_EMA, PRICE_CLOSE, 1);
    double slowEMA_1 = iMA(Symbol(), Period(), InpSlowEMAPeriod, 0, MODE_EMA, PRICE_CLOSE, 1);
    double rsi_1     = iRSI(Symbol(), Period(), InpRSIPeriod, PRICE_CLOSE, 1);

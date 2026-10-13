@@ -25,6 +25,8 @@ from harness.prompt_builder import PromptOnDemandBuilder
 from harness.verifier import DeterministicVerifier
 from harness.mermaid_guardian import MermaidUnicodeGuardian
 from harness.document import export_markdown_document, audit_document_formatting, get_pdf_export_guidance
+from harness.evaluator import BenchmarkEvaluator
+from harness.news_filter import EconomicNewsFilter
 
 
 def main() -> None:
@@ -106,6 +108,34 @@ def main() -> None:
     export_parser.add_argument("--title", required=True, help="Document Title")
     export_parser.add_argument("--input-file", required=True, help="Input Markdown file")
     export_parser.add_argument("--filename", required=True, help="Target filename in ./output/")
+
+    # 10. compile-mql (Headless MetaEditor compiler)
+    compile_parser = subparsers.add_parser("compile-mql", help="Compile MQL4/MQL5 Expert Advisors headlessly via MetaEditor")
+    compile_parser.add_argument("files", nargs="+", help="Path(s) to .mq4 or .mq5 files to compile")
+    compile_parser.add_argument(
+        "--platform",
+        choices=["auto", "mt4", "mt5"],
+        default="auto",
+        help="Force target platform (default: auto)",
+    )
+
+    # 11. eval-benchmark (Ground-truth 10-case evaluation)
+    bench_parser = subparsers.add_parser("eval-benchmark", help="Execute 10-case Ground Truth benchmark test suite")
+    bench_parser.add_argument(
+        "--export",
+        action="store_true",
+        default=True,
+        help="Export clean report to ./output/ (default: True)",
+    )
+    bench_parser.add_argument(
+        "--filename",
+        default="benchmark_report.md",
+        help="Output report filename in ./output/ (default: benchmark_report.md)",
+    )
+
+    # 12. check-news (Economic News Blackout Gate)
+    news_parser = subparsers.add_parser("check-news", help="Inspect high-impact economic news filter & blackout gate")
+    news_parser.add_argument("--symbol", default="XAUUSD", help="Trading symbol (default: XAUUSD)")
 
     args = parser.parse_args()
 
@@ -276,6 +306,73 @@ def main() -> None:
         )
         print(f"✅ Clean document exported to: {exported}")
         print("\n" + get_pdf_export_guidance())
+
+    elif args.command == "compile-mql":
+        verifier = DeterministicVerifier()
+        all_passed = True
+        for f_path in args.files:
+            p = Path(f_path)
+            if not p.exists():
+                print(f"❌ Source file not found: {f_path}")
+                all_passed = False
+                continue
+            plat = None if args.platform == "auto" else args.platform
+            target_plat = plat or ("mt4" if p.suffix.lower() == ".mq4" else "mt5")
+            editor_bin = verifier.find_metaeditor(target_plat)
+            print(f"\n🔨 Compiling: {p.name}")
+            print(f"  - Platform: {target_plat.upper()}")
+            print(f"  - Compiler: {editor_bin or '(not found)'}")
+            success, errs, warns, out_bin = verifier.compile_with_metaeditor(p, metaeditor_path=editor_bin)
+            if success:
+                print(f"  ✅ Compilation Succeeded (0 errors, {len(warns)} warnings)")
+                if out_bin:
+                    print(f"  📦 Generated Binary: {out_bin}")
+            else:
+                all_passed = False
+                print(f"  ❌ Compilation Failed ({len(errs)} error(s)):")
+                for err in errs:
+                    print(f"    - {err}")
+            for w in warns:
+                print(f"    ⚠️ Warning: {w}")
+
+        if not all_passed:
+            sys.exit(1)
+
+    elif args.command == "eval-benchmark":
+        evaluator = BenchmarkEvaluator()
+        print("⚡ Running GoldTrader 10-Case Ground-Truth Benchmark Suite...\n")
+        res = evaluator.run_benchmark()
+        print("=" * 60)
+        print(res.summary())
+        print("=" * 60)
+        for cr in res.case_results:
+            icon = "✅" if cr.passed else "❌"
+            print(f"  {icon} [{cr.case_id}] {cr.name:<45} ({cr.score}/{cr.weight} pts, {cr.execution_ms:.1f}ms)")
+            print(f"     Details: {cr.details}")
+        print("=" * 60)
+        if args.export:
+            out_doc = evaluator.export_report_document(res, filename=args.filename)
+            print(f"\n📄 Clean Benchmark Report exported to: {out_doc}")
+            print("\n" + get_pdf_export_guidance())
+        if res.failed_cases > 0:
+            sys.exit(1)
+
+    elif args.command == "check-news":
+        news_filter = EconomicNewsFilter()
+        news_filter.seed_standard_high_impact_events()
+        allowed, reason, ev = news_filter.is_trade_allowed(symbol=args.symbol)
+        print(f"⚡ Economic News Blackout Status for {args.symbol}:")
+        if allowed:
+            print("  ✅ Status: TRADE ALLOWED (No active blackout window)")
+        else:
+            print("  ⛔ Status: TRADING PAUSED (Blackout window active)")
+            print(f"  Reason: {reason}")
+        print("\n📅 Upcoming High-Impact Macro Releases:")
+        blackouts = news_filter.get_upcoming_blackouts(hours_ahead=720)
+        for event, w_start, w_end in blackouts[:5]:
+            print(f"  - [{event.currency} {event.impact.value}] {event.title} at {event.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')}")
+            print(f"    Window: {w_start.strftime('%H:%M')} -> {w_end.strftime('%H:%M UTC')}")
+
 
 
 if __name__ == "__main__":

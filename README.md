@@ -87,8 +87,14 @@ python -m harness.cli check-mql experts/mt4/GoldScalper_MT4.mq4 experts/mt5/Gold
 # 6. ตรวจสอบและซ่อมแซมแผนภาพ Mermaid ในเอกสาร Markdown
 python -m harness.cli check-mermaid docs/architecture/deterministic-harness.md --fix
 
-# 7. ส่งออกรายงานหรือเอกสารสเปกสู่ ./output/ แบบ Clean Markdown UTF-8
-python -m harness.cli export-report --title "Gold Scalping Strategy" --input-file docs/strategies/xauusd-microstructure-spec.md --filename gold_strategy_report.md
+# 8. คอมไพล์โค้ด MQL4 / MQL5 แบบ Headless ผ่าน MetaEditor จริง (0 Errors, 0 Warnings)
+python -m harness.cli compile-mql experts/mt4/GoldScalper_MT4.mq4 experts/mt5/GoldScalper_MT5.mq5
+
+# 9. รันชุดทดสอบ Ground-Truth Benchmark 10 ข้อ พร้อมออกรายงานใน ./output/
+python -m harness.cli eval-benchmark
+
+# 10. ตรวจสอบหน้าต่าง Blackout ข่าวเศรษฐกิจสหรัฐฯ ระดับสูง (NFP, CPI, FOMC)
+python -m harness.cli check-news --symbol XAUUSD
 ```
 
 ---
@@ -99,16 +105,19 @@ python -m harness.cli export-report --title "Gold Scalping Strategy" --input-fil
 GoldTrader/
 ├── AGENTS.md                          # กฎการกำกับดูแลเอเจนต์, 8 เสาหลัก และนโยบาย Zero-Test
 ├── README.md                          # ภาพรวมสถาปัตยกรรมและการใช้งาน
-├── .gitignore                         # กำหนดไฟล์ยกเว้นชั่วคราวและแคช
+├── .gitignore                         # กำหนดไฟล์ยกเว้นชั่วคราว แคช และไบนารี
 │
 ├── harness/                           # 🛡️ เครื่องยนต์ Deterministic Harness
 │   ├── __init__.py
-│   ├── cli.py                         # เครื่องมือ CLI สำหรับควบคุมระบบ
+│   ├── cli.py                         # เครื่องมือ CLI สำหรับควบคุมระบบ (รวม compile & eval)
 │   ├── schemas.py                     # Data Schemas และ Structured Output Contracts
 │   ├── state_machine.py               # Deterministic State Machine & Agent Routing
 │   ├── task_stack.py                  # ระบบ Atomic Stack Management (stack.json)
 │   ├── prompt_builder.py              # Prompt on Demand Builder (JIT Context Assembler)
-│   ├── verifier.py                    # Deterministic Verifier & Deep MQL4/MQL5 Linter
+│   ├── verifier.py                    # Deterministic Verifier & Headless MetaEditor Runner
+│   ├── evaluator.py                   # 10-Case Ground Truth Benchmark Evaluator
+│   ├── benchmark_cases.json           # สเปกชุดทดสอบเกณฑ์มาตรฐาน 10 ข้อ (TC-01 ถึง TC-10)
+│   ├── news_filter.py                 # Macroeconomic High-Impact News Blackout Gate
 │   ├── sanitizer.py                   # ตัวถอดรหัสและซ่อมแซม JSON ในเครื่อง (Zero Token Repair)
 │   ├── git_diff.py                    # Git Unified Diff Extractor
 │   ├── cache.py                       # Tier-0 Dual-Layer Cache (L1 LRU + L2 SQLite WAL)
@@ -138,15 +147,17 @@ GoldTrader/
 │
 ├── experts/                           # 🤖 ซอร์สโค้ด Expert Advisors ตัวอย่างระดับ Production
 │   ├── mt4/
-│   │   └── GoldScalper_MT4.mq4        # MT4 Scalper EA พร้อม Backwards Loop และ Error Retry
+│   │   └── GoldScalper_MT4.mq4        # MT4 Scalper EA พร้อม Backwards Loop, Trailing, Breakeven
 │   └── mt5/
-│       └── GoldScalper_MT5.mq5        # MT5 Scalper EA แบบ OOP พร้อม CTrade และ CopyBuffer
+│       └── GoldScalper_MT5.mq5        # MT5 Scalper EA แบบ OOP พร้อม CTrade, CopyBuffer, Trailing
 │
 ├── include/                           # 📦 ไลบรารีส่วนขยาย
 │   ├── mt4/
-│   │   └── TradeHelper_MT4.mqh        # ตัวคำนวณ Lot Size และ Spread Filter สำหรับ MT4
+│   │   ├── TradeHelper_MT4.mqh        # ตัวคำนวณ Lot, Spread, Trailing Stop, Breakeven สำหรับ MT4
+│   │   └── NewsFilter.mqh             # ตัวกรองข่าวเศรษฐกิจสหรัฐฯ สำหรับ MT4
 │   └── mt5/
-│       └── TradeHelper_MT5.mqh        # คลาสคำนวณ Lot Size และ Spread Filter สำหรับ MT5
+│       ├── TradeHelper_MT5.mqh        # คลาสคำนวณ Lot, Spread, Trailing Stop, Breakeven สำหรับ MT5
+│       └── NewsFilter.mqh             # ตัวกรองข่าวเศรษฐกิจสหรัฐฯ สำหรับ MT5
 │
 ├── output/                            # 📤 โฟลเดอร์ส่งออกรายงาน Clean Markdown (.md) UTF-8
 └── cache/                             # 🗄️ ฐานข้อมูล SQLite Compressed Disk Cache
