@@ -12,11 +12,11 @@ All agents operating in this workspace MUST strictly enforce the following produ
 flowchart TD
     subgraph MasterStandards ["🏛️ Production Harness Master Standards (8 Golden Pillars)"]
         direction TB
-        P1["<b>1. Visual & Diagram Protocol</b><br/>Strict ASCII Ban (+----+, |--|, ├──, └──, --->)<br/>Mermaid Unicode Guardian (flowchart TD/LR)<br/>Node ID = ASCII only, Labels = [\"...\"]"]
-        P2["<b>2. Documentation & Export Protocol</b><br/>Native UTF-8 Markdown in ./output/<br/>LaTeX math preservation ($inline$, $$display$$)<br/>Clean File Gate: Never save PDF advice in files"]
+        P1["<b>1. Visual & Diagram Protocol</b><br/>Strict ASCII Ban (+----+, |--|, ├──, └──, ---&gt;)<br/>Mermaid Unicode Guardian (flowchart TD/LR)<br/>Node ID = ASCII only, Labels = [#quot;...#quot;]"]
+        P2["<b>2. Documentation & Export Protocol</b><br/>Native UTF-8 Markdown in ./output/<br/>LaTeX math preservation ($inline$, $$display$$)<br/>Local Path Ban: No C:, D:, or file://<br/>Clean File Gate: Never save PDF advice in files"]
         P3["<b>3. Grounding Oracle & Anti-Hallucination</b><br/>Zero tolerance for fake MQL functions or fake APIs<br/>Whitelist verification from Grounding Oracle"]
         P4["<b>4. Anti-Sycophancy & Objectivity Gate</b><br/>Never validate retail illusions or guarantee 100% win<br/>Reject dangerous naked Martingale without hard stops"]
-        P5["<b>5. Emergency & Red Flag Interceptor</b><br/>Instant escalation on Margin Call &lt; 150% / &lt; 100%<br/>Daily Drawdown &ge; 5% circuit breaker"]
+        P5["<b>5. Emergency & Red Flag Interceptor</b><br/>Instant escalation on Margin Call &lt; 150% / &lt; 100%<br/>Daily Drawdown ≥ 5% circuit breaker"]
         P6["<b>6. Tier-0 Dual-Layer Cache & Resilience</b><br/>L1 LRU (&lt;0.2ms) + L2 SQLite WAL with zlib (&lt;2.0ms)<br/>Auto-init on first run in ./cache/"]
         P7["<b>7. Adaptive 3-Tier Persona Routing</b><br/>Tier 1: Quant / Senior Algo Trader (IRAC, Math)<br/>Tier 2: EA Developer (MQL4/MQL5 code patterns)<br/>Tier 3: Retail Trader (Plain language & risk warnings)"]
         P8["<b>8. Strict Token Optimization & Test Control</b><br/>Strict Zero-Test by Default (Opt-In Only)<br/>Traceback suppression flags (-q --tb=short)<br/>Hard auto-fix limit (Max 2 Attempts)"]
@@ -58,6 +58,11 @@ flowchart TD
    - All collaborating agents MUST emit Structured Output adhering to the contract defined in `harness/schemas.py`.
    - Task stack transitions and handoffs are governed deterministically via `stack.json`.
 
+6. **🚫 Strict Machine-Local Path Ban in Documentation (Portability Invariant)**:
+   - When saving, creating, or exporting any documentation, reports, specifications, or artifacts (e.g., in `./output/`, `docs/`, or PRDs), NEVER include host-specific absolute paths (such as `C:`, `D:`, `C:\...`, `D:\...`) or local URI schemes (`file://`, `file:///...`).
+   - All references MUST be repository-relative (e.g., `./output/...`, `./experts/...`, `docs/...`) or clean filenames.
+   - Machine-dependent paths leak local workstation topology and break portability across CI/CD, containers, and collaborator environments.
+
 ---
 
 ## 👥 Quant Trading Team Directory & Role Configurations
@@ -88,7 +93,7 @@ flowchart TD
 ### 📐 Quantitative Architect (`quant_architect`)
 * **Role:** Market Microstructure Analysis & Mathematical Modeling
 * **Profile:** Deep academic & practical quant developer, Sharpe/Sortino specialist.
-* **Skills Reference:** `.agents/skills/quant-analyst/SKILL.md`
+* **Skills Reference:** `.agents/skills/quant-analyst/SKILL.md`, `.agents/skills/mt5-backtest-analyzer/SKILL.md`, `.agents/skills/backtest-architect/SKILL.md`
 * **Configuration:**
   ```yaml
   name: quant_architect
@@ -118,7 +123,7 @@ flowchart TD
 ### 🧪 Risk Gatekeeper & QA Oracle (`risk_gatekeeper`)
 * **Role:** Quality Assurance, Risk Enforcement & Deterministic Verification Gatekeeper
 * **Profile:** Skeptical, thorough, capital-protection driven, token-conscious.
-* **Skills Reference:** `.agents/skills/risk-manager/SKILL.md`, `.agents/skills/anti-hallucination-guardian/SKILL.md`
+* **Skills Reference:** `.agents/skills/risk-manager/SKILL.md`, `.agents/skills/anti-hallucination-guardian/SKILL.md`, `.agents/skills/mt5-backtest-analyzer/SKILL.md`
 * **Configuration:**
   ```yaml
   name: risk_gatekeeper

@@ -24,6 +24,9 @@ Enforces non-negotiable empirical truth, verifies physical file artifacts, preve
    - In MQL5, only use verified MT5 standard trade classes (`CTrade`, `CPositionInfo`, `CSymbolInfo`).
 4. **Empirical Evidence Required**:
    - Every claim of resolution must cite exact file paths, line numbers, or execution output.
+5. **Strict Machine-Local Path Ban in Saved Documents**:
+   - NEVER reference local drive letters (`C:`, `D:`) or URI schemes (`file://`, `file:///...`) when saving or exporting documents, PRDs, specifications, or reports into `./output/`, `docs/`, or project files.
+   - All references MUST be repository-relative (`./output/...`, `./experts/...`, `docs/...`) or clean filenames.
 
 ---
 

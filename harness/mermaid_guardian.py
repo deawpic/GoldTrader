@@ -160,6 +160,29 @@ class MermaidUnicodeGuardian:
                     )
                 )
 
+            # Illegal quote escaping inside labels
+            if r'\"' in line:
+                errors.append(
+                    MermaidSyntaxErrorDetail(
+                        rule="Illegal Quote Escape in Mermaid",
+                        line_number=idx,
+                        line_content=line,
+                        message='Mermaid does not support backslash-escaped quotes (\\\"). Use #quot; or single quotes instead.',
+                    )
+                )
+
+            # Undeclared XML entities that crash Mermaid SVG renderer
+            if re.search(r'&(?:ge|le|ne);', line, re.IGNORECASE):
+                errors.append(
+                    MermaidSyntaxErrorDetail(
+                        rule="Undeclared XML Entity",
+                        line_number=idx,
+                        line_content=line,
+                        message="Mermaid SVG rendering crashes on entities like &ge;, &le;, &ne;. Use Unicode (≥, ≤, ≠) or standard ASCII.",
+                    )
+                )
+
+
         return {
             "passed": len(errors) == 0,
             "diagram_type": diag_type,
@@ -250,6 +273,18 @@ class MermaidUnicodeGuardian:
                 fix_unquoted_round,
                 current_line,
             )
+
+            # Auto-replace backslash quotes with #quot;
+            if r'\"' in current_line:
+                current_line = current_line.replace(r'\"', '#quot;')
+                fixes.append("Replaced backslash-escaped quotes with '#quot;'")
+
+            # Auto-replace undeclared XML entities with Unicode
+            if re.search(r'&(?:ge|le|ne);', current_line, re.IGNORECASE):
+                current_line = re.sub(r'&ge;', '≥', current_line, flags=re.IGNORECASE)
+                current_line = re.sub(r'&le;', '≤', current_line, flags=re.IGNORECASE)
+                current_line = re.sub(r'&ne;', '≠', current_line, flags=re.IGNORECASE)
+                fixes.append("Replaced undeclared XML entities (&ge;, &le;, &ne;) with Unicode")
 
             # Replace Thai Node IDs
             thai_id_nodes = re.findall(

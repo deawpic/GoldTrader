@@ -27,6 +27,8 @@ from harness.mermaid_guardian import MermaidUnicodeGuardian
 from harness.document import export_markdown_document, audit_document_formatting, get_pdf_export_guidance
 from harness.evaluator import BenchmarkEvaluator
 from harness.news_filter import EconomicNewsFilter
+from harness.backtest_analyzer import MT5BacktestAnalyzer
+from harness.wfo_calculator import WalkForwardCalculator
 
 
 def main() -> None:
@@ -136,6 +138,21 @@ def main() -> None:
     # 12. check-news (Economic News Blackout Gate)
     news_parser = subparsers.add_parser("check-news", help="Inspect high-impact economic news filter & blackout gate")
     news_parser.add_argument("--symbol", default="XAUUSD", help="Trading symbol (default: XAUUSD)")
+
+    # 13. analyze-backtest (MT5 Strategy Tester Report Analyzer)
+    backtest_parser = subparsers.add_parser("analyze-backtest", help="Analyze MT5 Strategy Tester backtest reports")
+    backtest_parser.add_argument("path", help="Path to MT5 HTML backtest report or folder of reports")
+    backtest_parser.add_argument("--compare", action="store_true", help="Compare multiple reports side-by-side")
+    backtest_parser.add_argument("--export", action="store_true", default=True, help="Export clean markdown report to ./output/")
+    backtest_parser.add_argument("--filename", default=None, help="Target markdown filename in ./output/")
+    backtest_parser.add_argument("--html", action="store_true", help="Generate interactive visual HTML dashboard with equity curves")
+
+    # 14. analyze-wfo (Walk-Forward Optimization Matrix Calculator)
+    wfo_parser = subparsers.add_parser("analyze-wfo", help="Calculate Walk-Forward Optimization (WFO) matrix & WFE score")
+    wfo_parser.add_argument("path", help="Path to folder containing sequential MT5 backtest HTML reports")
+    wfo_parser.add_argument("--split-ratio", type=float, default=0.3, help="Out-of-Sample ratio (default: 0.3)")
+    wfo_parser.add_argument("--export", action="store_true", default=True, help="Export clean markdown report to ./output/")
+    wfo_parser.add_argument("--filename", default="wfo_matrix_report.md", help="Target markdown filename in ./output/")
 
     args = parser.parse_args()
 
@@ -304,7 +321,7 @@ def main() -> None:
             markdown_content=content,
             filename=args.filename,
         )
-        print(f"✅ Clean document exported to: {exported}")
+        print(f"✅ Clean document exported to: ./output/{exported.name}")
         print("\n" + get_pdf_export_guidance())
 
     elif args.command == "compile-mql":
@@ -352,7 +369,7 @@ def main() -> None:
         print("=" * 60)
         if args.export:
             out_doc = evaluator.export_report_document(res, filename=args.filename)
-            print(f"\n📄 Clean Benchmark Report exported to: {out_doc}")
+            print(f"\n📄 Clean Benchmark Report exported to: ./output/{out_doc.name}")
             print("\n" + get_pdf_export_guidance())
         if res.failed_cases > 0:
             sys.exit(1)
@@ -373,6 +390,118 @@ def main() -> None:
             print(f"  - [{event.currency} {event.impact.value}] {event.title} at {event.scheduled_time.strftime('%Y-%m-%d %H:%M UTC')}")
             print(f"    Window: {w_start.strftime('%H:%M')} -> {w_end.strftime('%H:%M UTC')}")
 
+
+
+    elif args.command == "analyze-backtest":
+        target_path = Path(args.path)
+        if not target_path.exists():
+            print(f"❌ Specified path does not exist: {args.path}")
+            sys.exit(1)
+
+        html_files = []
+        if target_path.is_dir():
+            html_files = sorted(list(target_path.glob("*.html")))
+            if not html_files:
+                print(f"❌ No .html backtest reports found in directory: {args.path}")
+                sys.exit(1)
+        else:
+            html_files = [target_path]
+
+        print(f"🔍 Analyzing MT5 Backtest Report(s): {len(html_files)} file(s) found...")
+
+        if len(html_files) > 1 or args.compare:
+            print("📊 Generating Multi-Run Comparative Analysis Matrix...")
+            comp_md = MT5BacktestAnalyzer.compare_reports(html_files)
+            print("-" * 60)
+            # Print brief preview
+            lines = comp_md.splitlines()
+            for l in lines[:25]:
+                print(l)
+            print("..." if len(lines) > 25 else "")
+            print("-" * 60)
+            if args.export:
+                out_name = args.filename or "backtest_comparison_report.md"
+                out_path = export_markdown_document(
+                    title="MT5 Backtest Comparative Analysis",
+                    markdown_content=comp_md,
+                    filename=out_name,
+                )
+                print(f"✅ Clean Comparative Report exported to: ./output/{out_path.name}")
+        else:
+            single_file = html_files[0]
+            rep = MT5BacktestAnalyzer.parse_report(single_file)
+            audit = rep["audit"]
+            metrics = rep["metrics"]
+            print("-" * 60)
+            print(f"Expert:          {rep['expert']} ({rep['symbol']} {rep['period']})")
+            print(f"Net Profit:      ${metrics.get('total_net_profit', '0.00')}")
+            print(f"Profit Factor:   {metrics.get('profit_factor', 'N/A')}")
+            print(f"Max Equity DD:   {metrics.get('equity_dd_maximal', 'N/A')}")
+            print(f"Sharpe Ratio:    {metrics.get('sharpe_ratio', 'N/A')}")
+            print(f"Total Trades:    {metrics.get('total_trades', '0')} (Short: {metrics.get('short_trades', '0')} | Long: {metrics.get('long_trades', '0')})")
+            print(f"Quant Verdict:   {audit.get('status')} (Score: {audit.get('quant_score')}/100)")
+            print("-" * 60)
+            if audit.get("warnings"):
+                print("⚠️ Warnings:")
+                for w in audit["warnings"]:
+                    print(f"  - {w}")
+            if audit.get("flags"):
+                print("❌ Critical Flags:")
+                for f in audit["flags"]:
+                    print(f"  - {f}")
+            print("-" * 60)
+            if args.export:
+                out_name = args.filename or f"backtest_audit_{single_file.stem}.md"
+                md_content = MT5BacktestAnalyzer.generate_markdown(rep)
+                out_path = export_markdown_document(
+                    title=f"MT5 Backtest Audit - {single_file.name}",
+                    markdown_content=md_content,
+                    filename=out_name,
+                )
+                print(f"✅ Clean Backtest Audit Report exported to: ./output/{out_path.name}")
+
+            if args.html:
+                html_name = f"dashboard_{single_file.stem}.html"
+                html_content = MT5BacktestAnalyzer.generate_html_dashboard(rep)
+                out_html_path = Path("output") / html_name
+                out_html_path.parent.mkdir(parents=True, exist_ok=True)
+                out_html_path.write_text(html_content, encoding="utf-8")
+                print(f"📊 Interactive Visual HTML Dashboard exported to: ./output/{html_name}")
+
+
+    elif args.command == "analyze-wfo":
+        target_path = Path(args.path)
+        if not target_path.exists():
+            print(f"❌ Specified path does not exist: {args.path}")
+            sys.exit(1)
+
+        if target_path.is_dir():
+            html_files = sorted(list(target_path.glob("*.html")))
+        else:
+            html_files = [target_path]
+
+        if not html_files:
+            print(f"❌ No .html reports found in: {args.path}")
+            sys.exit(1)
+
+        print(f"📐 Computing Walk-Forward Optimization Matrix for {len(html_files)} reports...")
+        wfo_res = WalkForwardCalculator.analyze_wfo(html_files, oos_ratio=args.split_ratio)
+        print("-" * 60)
+        print(f"WFE (Walk-Forward Efficiency): {wfo_res['wfe']:.1f}% (Target ≥ 60.0%)")
+        print(f"PSR (Parameter Stability):     {wfo_res['psr']:.3f} (Target ≥ 0.700)")
+        print(f"DCR (Drawdown Consistency):    {wfo_res['dcr']:.1f}%")
+        print(f"Composite WFO Score:           {wfo_res['composite_score']}/100")
+        print(f"Robustness Verdict:            {wfo_res['verdict']}")
+        print(f"Details:                       {wfo_res['verdict_desc']}")
+        print("-" * 60)
+        if args.export:
+            md_text = WalkForwardCalculator.generate_wfo_markdown_report(wfo_res)
+            out_p = export_markdown_document(
+                title="Walk-Forward Optimization Matrix Report",
+                markdown_content=md_text,
+                filename=args.filename,
+            )
+            print(f"✅ Clean WFO Report exported to: ./output/{out_p.name}")
 
 
 if __name__ == "__main__":

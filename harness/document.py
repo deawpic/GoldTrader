@@ -5,6 +5,7 @@ Architecture:
 - Native UTF-8 Markdown (.md) export into ./output/ (Single Source of Truth)
 - Strict Prohibition of ASCII tables (+----+), ASCII trees (├──), and ASCII box art
 - Preservation of Mathematical and Quantitative Formulas (LaTeX / KaTeX)
+- Strict Prohibition of Machine-Local Paths (C:, D:, file:// URIs) in saved documents
 - Separation of Concerns: Clean Saved Files vs Chat-Only PDF/Printing Advisory
 - Subprocess multi-line execution safety (sys.executable + NamedTemporaryFile)
 """
@@ -27,6 +28,106 @@ ASCII_FLOWCHART_ARROW_REGEX = re.compile(r"(?:\[.+?\]|\|.+?\|)\s*(?:-{2,}>|={2,}
 ASCII_TREE_REGEX = re.compile(r"[\u251C\u2514\u2502\u2500]?\s*[├└][─\-]+")
 MARKDOWN_TABLE_SEPARATOR_REGEX = re.compile(r"^\s*\|(?:\s*:?-+:?\s*\|)+\s*$")
 MERMAID_BLOCK_REGEX = re.compile(r"```mermaid\s*\n.*?```", re.DOTALL | re.IGNORECASE)
+LOCAL_DRIVE_REGEX = re.compile(r"\b[A-Za-z]:[\\/][^\s\)\"\'>]*")
+LOCAL_FILE_URI_REGEX = re.compile(r"file:\/\/[^\s\)\"\'>]*", re.IGNORECASE)
+
+
+
+def detect_local_file_references(text: str) -> List[Dict[str, Any]]:
+    """
+    Detects forbidden machine-local absolute drive paths (e.g. C:, D:) and file:// URIs.
+    Documents must only use repository-relative paths (e.g. ./output/...) or clean basenames.
+    """
+    violations: List[Dict[str, Any]] = []
+    lines = text.splitlines()
+
+    for idx, line in enumerate(lines, 1):
+        clean_line = line.strip()
+        # Find drive paths (e.g. C:\, D:/)
+        for m in LOCAL_DRIVE_REGEX.finditer(clean_line):
+            violations.append({
+                "line": idx,
+                "content": clean_line,
+                "type": "local_drive_path",
+                "matched": m.group(0),
+                "recommendation": "Do not reference local drive letters (C:, D:). Use repository-relative paths (e.g. ./output/...) or basenames.",
+            })
+        # Find file:// URIs
+        for m in LOCAL_FILE_URI_REGEX.finditer(clean_line):
+            violations.append({
+                "line": idx,
+                "content": clean_line,
+                "type": "local_file_uri",
+                "matched": m.group(0),
+                "recommendation": "Do not reference file:// URIs in saved documents. Use repository-relative paths or clean basenames.",
+            })
+
+    return violations
+
+
+def sanitize_local_file_references(text: str, repo_root: Optional[Path] = None) -> Tuple[str, List[str]]:
+    """
+    Sanitizes forbidden machine-local drive letters (C:, D:) and file:// URIs in markdown text.
+    Replaces repo-internal paths with repository-relative paths (./...) and external paths with basenames.
+    """
+    fixes: List[str] = []
+    root = (repo_root or Path.cwd()).resolve()
+    root_str = str(root).replace("\\", "/")
+    
+    # 1. Markdown link format: [label](file:///... or C:\...) -> [label](./relative or filename)
+    def fix_md_link(match: re.Match) -> str:
+        label = match.group(1)
+        uri = match.group(2)
+        # Strip file:/// or file://
+        clean_path = re.sub(r"^file:\/{2,3}", "", uri, flags=re.IGNORECASE)
+        clean_norm = clean_path.replace("\\", "/")
+        if clean_norm.lower().startswith(root_str.lower()):
+            rel_part = clean_norm[len(root_str):].lstrip("/")
+            rel_path = f"./{rel_part}" if not rel_part.startswith("./") else rel_part
+            fixes.append(f"Sanitized markdown link URI to relative: {rel_path}")
+            return f"[{label}]({rel_path})"
+        base = Path(clean_path).name
+        fixes.append(f"Sanitized local link URI '{uri}' to basename '{base}'")
+        return f"[{label}]({base})"
+
+    sanitized = re.sub(
+        r"\[([^\]]+)\]\(((?:file:\/\/\S*|[A-Za-z]:[\\/][^\)]*))\)",
+        fix_md_link,
+        text,
+    )
+
+    # 2. Raw file:// URIs: file:///C:/... -> ./... or basename
+    def fix_raw_uri(match: re.Match) -> str:
+        uri = match.group(0)
+        clean_path = re.sub(r"^file:\/{2,3}", "", uri, flags=re.IGNORECASE)
+        clean_norm = clean_path.replace("\\", "/")
+        if clean_norm.lower().startswith(root_str.lower()):
+            rel_part = clean_norm[len(root_str):].lstrip("/")
+            rel_path = f"./{rel_part}" if not rel_part.startswith("./") else rel_part
+            fixes.append(f"Sanitized raw file URI to relative: {rel_path}")
+            return rel_path
+        base = Path(clean_path).name
+        fixes.append(f"Sanitized raw file URI to basename: {base}")
+        return base
+
+    sanitized = LOCAL_FILE_URI_REGEX.sub(fix_raw_uri, sanitized)
+
+    # 3. Raw drive paths: C:\Ai_code\GoldTrader\... -> ./... or D:\... -> basename
+    def fix_drive_path(match: re.Match) -> str:
+        path_str = match.group(0)
+        norm = path_str.replace("\\", "/")
+        if norm.lower().startswith(root_str.lower()):
+            rel_part = norm[len(root_str):].lstrip("/")
+            rel_path = f"./{rel_part}" if not rel_part.startswith("./") else rel_part
+            fixes.append(f"Sanitized repo-local path to relative: {rel_path}")
+            return rel_path
+        base = Path(path_str).name
+        fixes.append(f"Sanitized external local path to basename: {base}")
+        return base
+
+    sanitized = LOCAL_DRIVE_REGEX.sub(fix_drive_path, sanitized)
+
+    return sanitized, fixes
 
 
 def detect_ascii_tables_or_diagrams(text: str) -> List[Dict[str, Any]]:
@@ -86,8 +187,10 @@ def audit_document_formatting(markdown_text: str) -> Dict[str, Any]:
     table_separator_count = sum(
         1 for line in markdown_text.splitlines() if MARKDOWN_TABLE_SEPARATOR_REGEX.match(line)
     )
-    violations = detect_ascii_tables_or_diagrams(markdown_text)
-    passed = len(violations) == 0
+    ascii_violations = detect_ascii_tables_or_diagrams(markdown_text)
+    local_path_violations = detect_local_file_references(markdown_text)
+    all_violations = ascii_violations + local_path_violations
+    passed = len(all_violations) == 0
 
     return {
         "passed": passed,
@@ -95,11 +198,13 @@ def audit_document_formatting(markdown_text: str) -> Dict[str, Any]:
         "mermaid_block_count": len(mermaid_matches),
         "has_markdown_table": table_separator_count > 0,
         "markdown_table_count": table_separator_count,
-        "violations": violations,
-        "violation_count": len(violations),
-        "summary": "Document formatting fully compliant (Mermaid & Markdown tables)"
+        "violations": all_violations,
+        "ascii_violation_count": len(ascii_violations),
+        "local_path_violation_count": len(local_path_violations),
+        "violation_count": len(all_violations),
+        "summary": "Document formatting fully compliant (Mermaid & Markdown tables, zero local file path references)"
         if passed
-        else f"Found {len(violations)} ASCII formatting violations.",
+        else f"Found {len(all_violations)} formatting violations ({len(ascii_violations)} ASCII, {len(local_path_violations)} local file path references).",
     }
 
 
@@ -154,6 +259,13 @@ def export_markdown_document(
         content_parts.append(get_pdf_export_guidance())
 
     full_text = "\n\n".join(content_parts) + "\n"
+
+    # Strict Local Path Ban: Automatically sanitize any local drive letters (C:, D:) or file:// URIs
+    sanitized_text, path_fixes = sanitize_local_file_references(full_text, repo_root=base_dir.parent)
+    if path_fixes:
+        for fix in path_fixes:
+            logger.warning(f"Local Path Ban applied on export: {fix}")
+    full_text = sanitized_text
 
     with open(target_file, "w", encoding="utf-8") as f:
         f.write(full_text)

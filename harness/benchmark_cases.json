@@ -105,5 +105,25 @@
       "experts/mt4/GoldScalper_MT4.mq4",
       "experts/mt5/GoldScalper_MT5.mq5"
     ]
+  },
+  {
+    "id": "TC-11",
+    "name": "MT5 Strategy Tester Report Quantitative Audit Engine",
+    "category": "QUANT_AUDIT",
+    "weight": 10,
+    "description": "Verifies MT5 Strategy Tester HTML reports are parsed deterministically, capturing metrics, deal exits, directional asymmetry, and quant score.",
+    "target_files": [
+      "harness/backtest_analyzer.py"
+    ]
+  },
+  {
+    "id": "TC-12",
+    "name": "Strict Machine-Local Path Ban & Document Auto-Sanitization",
+    "category": "PORTABILITY_SECURITY",
+    "weight": 10,
+    "description": "Verifies that host-specific paths (C:, D:, file://) in documentation are flagged as violations and auto-sanitized to relative paths.",
+    "target_files": [
+      "harness/document.py"
+    ]
   }
 ]

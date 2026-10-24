@@ -32,6 +32,8 @@
   - Auto-initialization อัตโนมัติใน `./cache/` ตั้งแต่การรันครั้งแรก
 - **🚨 Emergency & Red Flag Interceptors**:
   - ตรวจจับความเสี่ยงวิกฤต: Margin Level $< 150\%$ / $< 100\%$, Daily Drawdown $\ge 5\%$, และ Spread Widening $> 40$ points บน XAUUSD
+- **🚫 Strict Machine-Local Path Ban (Portability Protocol)**:
+  - ห้ามอ้างอิงไดรฟ์เครื่องโลคัล (เช่น `C:`, `D:`) หรือ URI schemes (`file://`) ในการบันทึกเอกสารและรายงานลงใน `./output/` หรือ `docs/` โดยเด็ดขาด บังคับใช้ Repository-relative path (`./output/...`) หรือ Basename เท่านั้น เพื่อความยืดหยุ่นและรองรับ CI/CD & Docker ข้ามแพลตฟอร์ม
 
 ---
 
@@ -57,10 +59,10 @@ flowchart TD
 | บทบาท (Role) | รหัส Agent | หน้าที่หลัก | ทักษะที่เกี่ยวข้อง (Skills) |
 | :--- | :--- | :--- | :--- |
 | **📋 Strategy Product Manager** | `strategy_pm` | แปลงโจทย์การเทรดเป็น Quantitative Strategy PRD, กำหนดเงื่อนไข Entry/Exit, ตัวกรองเวลา (Session Filter) | [trading-spec-driven](.agents/skills/trading-spec-driven/SKILL.md) |
-| **📐 Quantitative Architect** | `quant_architect` | วิเคราะห์ Market Microstructure บน XAUUSD, คำนวณ Sharpe, Sortino, VaR, และ Expectancy ด้วยสูตร $\LaTeX$ | [quant-analyst](.agents/skills/quant-analyst/SKILL.md) |
+| **📐 Quantitative Architect** | `quant_architect` | วิเคราะห์ Market Microstructure บน XAUUSD, คำนวณ Sharpe, Sortino, VaR, และ Expectancy ด้วยสูตร $\LaTeX$ | [quant-analyst](.agents/skills/quant-analyst/SKILL.md), [mt5-backtest-analyzer](.agents/skills/mt5-backtest-analyzer/SKILL.md), [backtest-architect](.agents/skills/backtest-architect/SKILL.md) |
 | **⚙️ Senior MQL4 Developer** | `mql4_developer` | พัฒนา EA บน MT4, วนลูป Order ถอยหลัง, จัดการ Slippage, Requote, และ Error 130/138 Retry Loops | [mql4-ea-development](.agents/skills/mql4-ea-development/SKILL.md), [mql-clean-code-guard](.agents/skills/mql-clean-code-guard/SKILL.md) |
 | **⚙️ Senior MQL5 Developer** | `mql5_developer` | พัฒนา EA บน MT5 แบบ OOP ด้วย `CTrade`, `CPositionInfo`, ดึงข้อมูลผ่าน `CopyBuffer`, จัดการทรัพยากรใน `OnDeinit()` | [mql5-ea-development](.agents/skills/mql5-ea-development/SKILL.md), [mql-clean-code-guard](.agents/skills/mql-clean-code-guard/SKILL.md) |
-| **🧪 Risk Gatekeeper & QA** | `risk_gatekeeper` | ตรวจสอบโค้ดด้วย MQL Static Linter (Exit Code 0), บังคับใช้ Stop Loss, Dynamic Spread Check, คุมกฎ Zero-Test | [risk-manager](.agents/skills/risk-manager/SKILL.md), [anti-hallucination](.agents/skills/anti-hallucination-guardian/SKILL.md) |
+| **🧪 Risk Gatekeeper & QA** | `risk_gatekeeper` | ตรวจสอบโค้ดด้วย MQL Static Linter (Exit Code 0), บังคับใช้ Stop Loss, Dynamic Spread Check, คุมกฎ Zero-Test | [risk-manager](.agents/skills/risk-manager/SKILL.md), [anti-hallucination](.agents/skills/anti-hallucination-guardian/SKILL.md), [mt5-backtest-analyzer](.agents/skills/mt5-backtest-analyzer/SKILL.md) |
 
 ---
 
@@ -90,11 +92,18 @@ python -m harness.cli check-mermaid docs/architecture/deterministic-harness.md -
 # 8. คอมไพล์โค้ด MQL4 / MQL5 แบบ Headless ผ่าน MetaEditor จริง (0 Errors, 0 Warnings)
 python -m harness.cli compile-mql experts/mt4/GoldScalper_MT4.mq4 experts/mt5/GoldScalper_MT5.mq5
 
-# 9. รันชุดทดสอบ Ground-Truth Benchmark 10 ข้อ พร้อมออกรายงานใน ./output/
+# 9. รันชุดทดสอบ Ground-Truth Benchmark 12 ข้อ (ครอบคลุม MQL, Risk, Backtest และ Portability)
 python -m harness.cli eval-benchmark
 
 # 10. ตรวจสอบหน้าต่าง Blackout ข่าวเศรษฐกิจสหรัฐฯ ระดับสูง (NFP, CPI, FOMC)
 python -m harness.cli check-news --symbol XAUUSD
+
+# 11. วิเคราะห์ Backtest Report จาก MT5 (.html) พร้อมสร้าง Interactive HTML Dashboard
+python -m harness.cli analyze-backtest "D:\MT5\EA-GoldTrader\sample-backtest\09w1m1.html" --html
+python -m harness.cli analyze-backtest "D:\MT5\EA-GoldTrader\sample-backtest" --compare
+
+# 12. คำนวณ Walk-Forward Optimization (WFO) Matrix และวัดค่า Walk-Forward Efficiency (WFE)
+python -m harness.cli analyze-wfo "D:\MT5\EA-GoldTrader\sample-backtest" --split-ratio 0.3
 ```
 
 ---

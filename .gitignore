@@ -43,3 +43,10 @@ cache/*.db-shm
 # OS generated
 .DS_Store
 Thumbs.db
+
+
+# Output Artifacts
+output/*
+
+# Experts
+experts/*
